@@ -106,7 +106,7 @@ def test_daglit_digraph_fundamentals():
     paths = [tuple(p) for p in dg.paths()]
     assert set(paths) == {("A", "B"), ("B", "C"), ("A", "B", "C")}
 
-@pytest.mark.repeat(1000)
+@pytest.mark.repeat(1)
 def test_daglit_digraph_random():
     alphabet="ABC"
     dag = daglit.DiGraph("test")

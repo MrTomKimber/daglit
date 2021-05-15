@@ -1,4 +1,4 @@
-import digraph
+import daglit.digraph
 
 def rescale_positions(positions_d, xy_bounds):
     minx, maxx, miny, maxy = xy_bounds

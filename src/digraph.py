@@ -47,11 +47,15 @@ class Node():
         return len(self.predecessors) + len(self.successors)
 
     def flow_class(self):
+        class_names = { 0 : "Singleton",
+                        1 : "Sink",
+                        2 : "Source",
+                        3 : "Flow"}
         in_degree  = 0  if len(self.predecessors) == 0 else 1
         out_degree = 0 if len(self.successors) == 0 else 1
         #print ( self.name, in_degree, out_degree)
         io_class = (1 * in_degree) + (2 * out_degree)
-        return io_class
+        return class_names[io_class]
 
     def edges(self):
         edgelist = []
@@ -177,12 +181,42 @@ class DiGraph(Graph):
     def adjacency_matrix(self, nodelist=None):
         """Return the adjacency matrix for the graph in nested list format, along with a list of node-labels to align to xy positions."""
         if nodelist is None:
-            nodelist=list(self.topological_sort(lexicographical=True))
+            nodelist=list(self.nodes.keys())
         matrix = [[0] * len(nodelist) for e,n in enumerate(nodelist)]
         for e in self.edges:
             x,y=nodelist.index(e[0]), nodelist.index(e[1])
             matrix[x][y]=matrix[x][y]+1
         return matrix, nodelist
+
+    def transition_matrix(self, nodelist=None,edge_metric=None,transpose=True,randomise_flow=False):
+        """Returns the markov transitional matrix associated with the graph.
+        If randomise_flow is set, then a diagonal of 1's is inserted into the adjancency matrix to allow for
+        movement from each node to any adjacent nodes to become optional and not mandatory. """
+        if nodelist is None:
+            nodelist=list(self.nodes.keys())
+        matrix = [[0] * len(nodelist) for e,n in enumerate(nodelist)]
+        for e,o in self.edges.items():
+            x,y=nodelist.index(e[0]), nodelist.index(e[1])
+            matrix[x][y]=matrix[x][y]+o.data.get(edge_metric,1)
+        if randomise_flow:
+            for x in range(0,len(nodelist)):
+                if sum(matrix[x])>0:
+                    matrix[x][x]=sum(matrix[x])
+                else:
+                    matrix[x][x]=1
+        qmatrix=list()
+        for r in matrix:
+            qmatrix.append([(e/sum(r)) if sum(r)!=0 else 0 for e in r])
+        if transpose:
+            return _transpose_matrix(qmatrix)
+        else:
+            return qmatrix
+
+    @staticmethod
+    def _transpose_matrix(matrix):
+        return list(map(lambda *a: list(a), *matrix))
+
+
 
     def root_nodes(self):
         """Retrieve a list of node-names that lie at the start of the DAG - i.e. that have no predecessors"""
@@ -200,7 +234,7 @@ class DiGraph(Graph):
                 roots.append(n.name)
         return set(roots)
 
-    def node_degree(self, degree=None, names=True, in_out=None):
+    def nodes_degree(self, degree=None, names=True, in_out=None):
         """:parm degree: None, or int - a selector applied as a filter
         :parm names: bool, return Names if True, or Node objects if False
         :parm in_out: None, bool - specify whether in, out or both degree measures are to be measured
@@ -236,11 +270,11 @@ class DiGraph(Graph):
                         node_d[dk]=[n]
             return node_d
 
-    def node_in_degree(self, degree=None, names=True):
-        return self.node_degree(degree=degree, names=names, in_out="in")
+    def nodes_in_degree(self, degree=None, names=True):
+        return self.nodes_degree(degree=degree, names=names, in_out="in")
 
-    def node_out_degree(self, degree=None, names=True):
-        return self.node_degree(degree=degree, names=names, in_out="out")
+    def nodes_out_degree(self, degree=None, names=True):
+        return self.nodes_degree(degree=degree, names=names, in_out="out")
 
     def ancestors(self, node, names=True):
         return set(self.connected_nodes(node, names=names, direction="up"))
@@ -334,7 +368,7 @@ class DiGraph(Graph):
 
     # Create a deep copy of the graph, using only the nodes referenced in the node_collection variable
     def subgraph(self, node_collection, name=None):
-        sg = DiGraph(name)
+        sg = DiGraph(name,acyclic=self.acyclic)
         for e in self.edges:
             if e[0] in node_collection and e[1] in node_collection:
                 sg.add_edge(e,self.edges[e].data)
@@ -356,7 +390,7 @@ class DiGraph(Graph):
                     loop_members.add(frozenset(cycle))
                     processed=processed.union(cycle)
         if len (loop_members)==0:
-            return None
+            return set()
         else:
             return loop_members
 
@@ -370,6 +404,8 @@ class DiGraph(Graph):
         # Identify existing cycles and consolidate these into virtual "cyclic" nodes.
         # After performing, the remaining graph can be expressed as a DAG without any cycles.
         # The virtual DAG nodes should be unpackable from the virtual storage.
+        # This consolidated version of the DAG can be used to help perform layout arrangements by
+        # splitting the graph down into component elements.
         cycle_nodes = []
         cyclic_nodes = set(chain(*self.cycle_members()))
         non_cycle_nodes = set([n for n in self.nodes.keys() if n not in cyclic_nodes])
@@ -406,8 +442,6 @@ class DiGraph(Graph):
                 c_graph.add_node(c_name, data={"members" : data_payload})
             else:
                 c_graph.nodes[c_name].data={"members" : data_payload}
-
-
         return c_graph
 
 
@@ -442,7 +476,7 @@ class DiGraph(Graph):
                             c_map[w]=c
 
                             queue.append(w)
-        singletons = { k: 0 for k in self.node_degree(0,names=True) }
+        singletons = { k: 0 for k in self.nodes_degree(0,names=True) }
         c_map.update(singletons)
         return c_map
 
@@ -473,13 +507,13 @@ class DiGraph(Graph):
         else:
             root_layer = set(self.root_nodes())
         remaining_set = set(self.nodes.keys())
-        processed_set = set()
+        processed_set = []
         while len(root_layer)>0:
             if lexicographical:
                 root_layer=sorted(root_layer)[::-1]
             n = root_layer.pop()
             remaining_set.remove(n)
-            processed_set.add(n)
+            processed_set.append(n)
             yield n
             for m in ( node for node in self.nodes[n].successors if node in remaining_set):
                 if all([p in processed_set for p in self.nodes[m].predecessors] + [True]):
@@ -487,8 +521,11 @@ class DiGraph(Graph):
                         root_layer.append(m)
                     else:
                         root_layer.add(m)
-        if len(remaining_set)>0:
-            raise DAGContainsCycleError
+        if len(remaining_set)>0 :
+            raise DAGContainsCycleError(processed_set)
+
+
+
 
 
     def simple_arborescence(self):

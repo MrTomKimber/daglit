@@ -1,4 +1,4 @@
-import digraph
+import daglit.digraph
 import random
 import uuid
 
