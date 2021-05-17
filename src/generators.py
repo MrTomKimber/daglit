@@ -35,7 +35,7 @@ def gen_random_name(length=8, alphabet=ALPHABET_UC):
 
 
 def random_dag(nodesize=15, tree_factor=1, connected_factor=1, alphabet=ALPHABET_UC):
-    rdag = digraph.DiGraph()
+    rdag = daglit.digraph.DiGraph()
     node_collection = set()
     name_generator=gen_name_sequence(alphabet=alphabet)
     for n in range(0,nodesize):

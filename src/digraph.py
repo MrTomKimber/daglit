@@ -191,7 +191,9 @@ class DiGraph(Graph):
     def transition_matrix(self, nodelist=None,edge_metric=None,transpose=True,randomise_flow=False):
         """Returns the markov transitional matrix associated with the graph.
         If randomise_flow is set, then a diagonal of 1's is inserted into the adjancency matrix to allow for
-        movement from each node to any adjacent nodes to become optional and not mandatory. """
+        movement from each node to any adjacent nodes to become optional and not mandatory.
+        It is customary for the transition matrix to be interpreted in a form that works like a transposition of
+        the adjacency matrix, but it's possible to turn this off to align the outputs using transpose=False"""
         if nodelist is None:
             nodelist=list(self.nodes.keys())
         matrix = [[0] * len(nodelist) for e,n in enumerate(nodelist)]
@@ -208,7 +210,7 @@ class DiGraph(Graph):
         for r in matrix:
             qmatrix.append([(e/sum(r)) if sum(r)!=0 else 0 for e in r])
         if transpose:
-            return _transpose_matrix(qmatrix)
+            return DiGraph._transpose_matrix(qmatrix)
         else:
             return qmatrix
 
@@ -220,19 +222,19 @@ class DiGraph(Graph):
 
     def root_nodes(self):
         """Retrieve a list of node-names that lie at the start of the DAG - i.e. that have no predecessors"""
-        leaves = []
+        roots = []
         for k,n in self.nodes.items():
             if len(n.predecessors)==0:
-                leaves.append(n.name)
-        return set(leaves)
+                roots.append(n.name)
+        return set(roots)
 
     def leaf_nodes(self):
         """Retrieve a list of node-names that lie at the end of the DAG - i.e. that have no successors"""
-        roots=[]
+        leaves=[]
         for k,n in self.nodes.items():
             if len(n.successors)==0:
-                roots.append(n.name)
-        return set(roots)
+                leaves.append(n.name)
+        return set(leaves)
 
     def nodes_degree(self, degree=None, names=True, in_out=None):
         """:parm degree: None, or int - a selector applied as a filter
@@ -374,12 +376,16 @@ class DiGraph(Graph):
                 sg.add_edge(e,self.edges[e].data)
                 for n in e:
                     sg.nodes[n].data = self.nodes[n].data
+        for n in self.nodes:
+            if n in node_collection and n not in sg.nodes:
+                sg.add_node(n, data=self.nodes[n].data)
+
         return sg
 
 
 
     def cycle_members(self):
-        """Identify which nodes participate in cycles, by finding nodes who are their own descendents.
+        """Identify which nodes participate in cycles, by finding nodes whose ancestors also feature as their descendents.
            Returns a set of (frozen)sets (normal sets don't hash), each consisting of a disjoint cycle membership."""
         loop_members=set()
         processed = set()
@@ -427,7 +433,7 @@ class DiGraph(Graph):
             data_payload = {}
             c_name = "__cycle_{e}".format(e=e)
             for member in cycle:
-                node_translation_map[member]=c_name
+                #node_translation_map[member]=c_name
                 data_payload[member]={**{"edges" : self.nodes[member].edges()},
                                          "data" : self.nodes[member].data}
 
@@ -435,17 +441,17 @@ class DiGraph(Graph):
                     if (len([n for n in edge if n in non_cycle_nodes])==1 and len([n for n in edge if n in cyclic_nodes])==1):
                         new_edge = (node_translation_map[edge[0]], node_translation_map[edge[1]])
                         c_graph.add_edge(new_edge, data=self.edges[edge].data)
-                    elif node_translation_map[edge[0]]!= node_translation_map[edge[1]] and len([n for n in edge if n in non_cycle_nodes])==2:
+                    elif node_translation_map[edge[0]]!= node_translation_map[edge[1]] and len([n for n in edge if n in cyclic_nodes])==2:
                         new_edge = (node_translation_map[edge[0]], node_translation_map[edge[1]])
                         c_graph.add_edge(new_edge, data=self.edges[edge].data)
+
+
             if not c_name in c_graph.nodes.keys():
                 c_graph.add_node(c_name, data={"members" : data_payload})
             else:
                 c_graph.nodes[c_name].data={"members" : data_payload}
+        print (node_translation_map)
         return c_graph
-
-
-
 
     def is_bipartite(self):
         try:
@@ -500,7 +506,7 @@ class DiGraph(Graph):
 
 
     def topological_sort(self, lexicographical=False):
-
+        "Return a strict topological sort - requires the graph to have no cycles"
         ordered_list = []
         if lexicographical:
             root_layer = sorted(self.root_nodes())
@@ -525,10 +531,144 @@ class DiGraph(Graph):
             raise DAGContainsCycleError(processed_set)
 
 
+    def node_depth_map(self):
+        depth=0
+        ndm={}
+        layer = self.root_nodes()
+        next_layer = set()
+        while len(layer)>0:
+            for n in layer:
+                ndm[n]=depth
+                for s in self.nodes[n].successors:
+                    next_layer.add(s)
+            depth=depth+1
+            layer=list(next_layer)
+            next_layer = set()
+        if len(ndm)!=len(self.nodes):
+            print (set(ndm.keys())-set(self.nodes.keys()))
+        return ndm
+
+    def all_simple_paths_between(self, source, target, cutoff=None):
+        if cutoff is not None and cutoff < 1:
+            return
+        if cutoff is None:
+            cutoff = len(self.nodes)-1
+        visited = [source]
+        stack = [iter(self.nodes[source].successors)]
+        while stack:
+            children = stack[-1]
+            child = next(children, None)
+            if child is None:
+                stack.pop()
+                visited.pop()
+            elif len(visited) < cutoff:
+                if child == target:
+                    yield visited + [ target ]
+                elif child not in visited:
+                    visited.append(child)
+                    stack.append(iter(self.nodes[child].successors))
+            else:
+                if child == target or target in children:
+                    yield visited + [ target ]
+                stack.pop()
+                visited.pop()
+
+    def all_simple_paths(self):
+        for s_node in self.nodes.keys():
+            for t_node in self.nodes.keys():
+                vp_iter=self.all_simple_paths_between(s_node, t_node)
+                for p in vp_iter:
+                    yield p
+        for singleton in self.nodes_degree(0, names=True):
+            yield singleton
+
+    def full_paths(self):
+        for s_node in self.root_nodes():
+            for t_node in self.leaf_nodes():
+                vp_iter=self.all_simple_paths_between(s_node, t_node)
+                for p in vp_iter:
+                    yield p
+        for singleton in self.node_degree(0, names=True):
+            yield singleton
+
+    def node_flows(self):
+        """How often does a node feature in an enumeration of all root to leaf node traversals?
+           This gives an indication of the node's centrality.
+           Alternately, how many such traversals exist that pass through each node?"""
+        return dict(Counter(chain(*self.full_paths())))
 
 
+    def edge_flows(self):
+        edge_flows_d={}
+        for p in self.full_paths():
+            for i in range(0,len(p)-1):
+                fn, tn = p[i], p[i+1]
+                edge_flows_d[(fn,tn)]=edge_flows_d.get((fn,tn),0)+1
+        return edge_flows_d
+
+    def longest_paths(self):
+        paths = list(self.full_paths())
+        plen = [len(p) for p in paths]
+        pind = [e for e,i in enumerate(plen) if i==max(plen)]
+        return [paths[e] for e in pind]
+
+    def longest_path_between(self, source, target):
+        pathlist = list(self.all_simple_paths_between(source, target))
+        plen=[len(p) for p in pathlist]
+        if len(plen) > 0:
+            return pathlist[plen.index(max(plen))]
+        else:
+            return []
+
+    def shortest_path_between(self, source, target):
+        pathlist = list(self.all_simple_paths_between(source, target))
+        plen=[len(p) for p in pathlist]
+        if len(plen) > 0:
+            return pathlist[plen.index(min(plen))]
+        else:
+            return []
+
+    def internode_distance(self, source, target):
+        path = self.shortest_path_between(source, target)
+        return len(path)
+
+    def lowest_common_ancestors(self,x,y):
+        x_ancestors = self.ancestors(x).union(x)
+        y_ancestors = self.ancestors(y).union(y)
+        ancestry_graph = self.subgraph(x_ancestors.intersection(y_ancestors))
+        return ancestry_graph.leaf_nodes()
+
+    def node_proximity_matrix(self, nodelist):
+        max_proximity=len(self.nodes)+1
+        matrix=[]
+
+        for n in nodelist:
+            dn=[]
+
+            for m in nodelist:
+                if n!=m:
+                    lca_s = self.lowest_common_ancestors(n,m)
+                    lca_count=len(lca_s)
+                    if lca_count==1:
+                        lca=lca_s.pop()
+                    elif lca_count>1:
+                        lca=lca_s.pop()
+
+                    if lca_count==0:
+                        dn.append(max_proximity)
+                        #break
+                    else:
+                        n_dist = self.internode_distance(lca,n)
+                        m_dist = self.internode_distance(lca,m)
+                        dn.append((n_dist+m_dist)-1)
+                else:
+                    dn.append(max_proximity)
+            matrix.append(dn)
+
+        return matrix
 
     def simple_arborescence(self):
+        "Force a graph into an arborescence - dropping any back edges that may upset the tree structure"
         node_order = self.topological_sort()
         arb=DiGraph()
         processed=set()
