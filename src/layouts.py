@@ -132,7 +132,7 @@ def tree_layout_2(dag, hide_virtual=True,reverse=False):
             # Add the parents of this node to the current parents collection
             parents=parents.union(set(d.nodes[i].predecessors.keys()))
             if len(d.nodes[i].successors)==0: # This is a full leaf node, so lay out in a linear spread
-                print("bottom row", i)
+#                print("bottom row", i)
                 if not reverse:
                     posns[i]= ((c/leaf_count), (depths[i]/full_depth))
                 else:
@@ -140,7 +140,7 @@ def tree_layout_2(dag, hide_virtual=True,reverse=False):
             else:
                 children = d.nodes[i].successors
                 if all([c in posns.keys() for c in children]):
-                    print ( "children of ", i, ":", d.nodes[i].successors)
+#                    print ( "children of ", i, ":", d.nodes[i].successors)
 
                     xpos = sum([posns.get(l,[0,0])[0] for l in children])/len(children)
                     if not reverse:

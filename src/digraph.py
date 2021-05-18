@@ -1,5 +1,6 @@
 from itertools import chain
 from collections import Counter
+import daglit.utils
 
 class DAGError(Exception):
     "General Purpose Directed Acyclic Graph Error"
@@ -33,6 +34,15 @@ class Node():
         self.predecessors = predecessors
         self.data = data
         self._update_neighbors()
+
+    def __eq__(self, node):
+        name_check = self.name == node.name
+        successors_check = all([k in set(k for k,v in node.successors.items()) for k,v in self.successors.items() ])
+        predecessors_check = all([k  in set(k for k,v in node.predecessors.items()) for k,v in self.predecessors.items()])
+        data_check = all([(k,v) in set((x,y) for x,y in node.data.items()) for k,v in self.data.items() ])
+        return all([name_check, successors_check, predecessors_check, data_check])
+
+
 
     def _update_neighbors(self):
         self.neighbors = {**self.successors , **self.predecessors}
@@ -74,6 +84,11 @@ class Edge():
         if data is None:
             data = {}
         self.data = data
+    def __eq__(self, edge):
+        #name_check = self.name == node.name
+        edge_check = self.edge == edge.edge
+        data_check = all([(k,v) in set((x,y) for x,y in edge.data.items()) for k,v in self.data.items() ])
+        return all([edge_check,data_check])
 
 class Graph():
     """
@@ -98,7 +113,14 @@ class DiGraph(Graph):
         self.edges={}
         self.acyclic=acyclic
 
-
+    def __eq__(self, digraph):
+        name_check = self.name == digraph.name
+        nodes_check = all([n==digraph.nodes[k] for k,n in self.nodes.items()]) and (len(self.nodes) == len(digraph.nodes))
+        edges_check = all([e==digraph.edges[k] for k,e in self.edges.items()]) and (len(self.edges) == len(digraph.edges))
+        acyclic_check = self.acyclic==digraph.acyclic
+        if not all([name_check, nodes_check, edges_check, acyclic_check]):
+            print([name_check, nodes_check, edges_check, acyclic_check])
+        return all([name_check, nodes_check, edges_check, acyclic_check])
 
     def __next__(self):
         for k,v in self.nodes.items():
@@ -210,13 +232,10 @@ class DiGraph(Graph):
         for r in matrix:
             qmatrix.append([(e/sum(r)) if sum(r)!=0 else 0 for e in r])
         if transpose:
-            return DiGraph._transpose_matrix(qmatrix)
+            return daglit.utils._transpose_matrix(qmatrix)
         else:
             return qmatrix
 
-    @staticmethod
-    def _transpose_matrix(matrix):
-        return list(map(lambda *a: list(a), *matrix))
 
 
 
