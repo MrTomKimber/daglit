@@ -437,8 +437,6 @@ class DiGraph(Graph):
             for n in cycle:
                 node_translation_map[n]=c_name
 
-        print(node_translation_map)
-
         for e,cycle in enumerate(cm_list):
             data_payload = {}
             c_name = "__cycle_{e}".format(e=e)
@@ -451,12 +449,10 @@ class DiGraph(Graph):
                     if (len([n for n in edge if n in non_cycle_nodes])==1 and len([n for n in edge if n in cyclic_nodes])==1):
                         new_edge = (node_translation_map[edge[0]], node_translation_map[edge[1]])
                         if new_edge[0]!=new_edge[1]:
-                            print(new_edge)
                             c_graph.add_edge(new_edge, data=self.edges[edge].data)
                     elif node_translation_map[edge[0]]!= node_translation_map[edge[1]] and len([n for n in edge if n in cyclic_nodes])==2:
                         new_edge = (node_translation_map[edge[0]], node_translation_map[edge[1]])
                         if new_edge[0]!=new_edge[1]:
-                            print(new_edge)
                             c_graph.add_edge(new_edge, data=self.edges[edge].data)
 
 
@@ -510,12 +506,12 @@ class DiGraph(Graph):
         cdag = DiGraph(self.name,self.acyclic)
         for k,n in self.nodes.items():
             cdag.add_node(k, data=n.data)
-        if not reverse_nodes:
-            for k,e in self.edges.items():
-                cdag.add_edge(k,data=e.data)
-        else:
+        if reverse_nodes:
             for k,e in self.edges.items():
                 cdag.add_edge((k[1],k[0]),data=e.data)
+        else:
+            for k,e in self.edges.items():
+                cdag.add_edge(k,data=e.data)
         return cdag
 
 

@@ -55,6 +55,18 @@ def component_graph():
                     "i" : ["g"]  }, acyclic=False)
     return dg
 
+@pytest.fixture
+def component_graph_v2():
+    dg = daglit.DiGraph.from_dict ({  "a" : ["b"],
+                    "b" : ["c"],
+                    "c" : ["d", "g"],
+                    "d" : ["e"],
+                    "e" : ["b"],
+                    "g" : ["h"],
+                    "h" : ["i"],
+                    "i" : ["g"]  }, acyclic=False)
+    return dg
+
 def test_ancestry_digraph_methods(simple_graph):
     dg = simple_graph
     assert dg.ancestors('A')==set()
@@ -244,6 +256,8 @@ def test_consolidate_0(simple_graph):
     assert not( simple_graph.has_cycle() )
     assert not( con_graph.has_cycle() )
     assert len(con_graph.nodes)==5
+    assert con_graph.root_nodes()=={"A", "E"}
+    assert con_graph.leaf_nodes()=={"D", "E"}
 
 def test_consolidate_1(cyclic_graph):
     print("Cyclic Graph Cycle Members")
@@ -251,6 +265,8 @@ def test_consolidate_1(cyclic_graph):
     con_graph = cyclic_graph.consolidate_cycles()
     assert not( con_graph.has_cycle() )
     assert len(con_graph.nodes)==1
+    assert con_graph.root_nodes()=={"__cycle_0"}
+    assert con_graph.leaf_nodes()=={"__cycle_0"}
 
 def test_consolidate_2(component_graph):
     print("Component Graph Cycle Members")
@@ -259,3 +275,51 @@ def test_consolidate_2(component_graph):
     con_graph = component_graph.consolidate_cycles()
     assert not( con_graph.has_cycle() )
     assert len(con_graph.nodes)==4
+    assert con_graph.root_nodes()=={"a"}
+
+
+def test_consolidate_3(component_graph_v2):
+    print("Component Graph V2 Cycle Members")
+    print (list(component_graph_v2.cycle_members()))
+    assert component_graph_v2.has_cycle()
+    con_graph = component_graph_v2.consolidate_cycles()
+    assert not( con_graph.has_cycle() )
+    assert len(con_graph.nodes)==3
+    assert con_graph.root_nodes()=={"a"}
+
+
+
+def test_graph_analytics_1(simple_graph, cyclic_graph, component_graph, component_graph_v2):
+    assert simple_graph.is_bipartite()
+    assert not ( cyclic_graph.is_bipartite() )
+    assert not( component_graph.is_bipartite() )
+    assert not( component_graph_v2.is_bipartite() )
+
+def test_graph_copy(simple_graph, cyclic_graph, component_graph, component_graph_v2):
+    sgc=simple_graph.copy()
+    assert sgc==simple_graph
+    sgc=cyclic_graph.copy()
+    assert sgc==cyclic_graph
+    sgc=component_graph.copy()
+    assert sgc==component_graph
+    sgc=component_graph_v2.copy()
+    assert sgc==component_graph_v2
+
+    sgc=simple_graph.copy(reverse_nodes=False)
+    assert sgc==simple_graph
+    sgc=cyclic_graph.copy(reverse_nodes=False)
+    assert sgc==cyclic_graph
+    sgc=component_graph.copy(reverse_nodes=False)
+    assert sgc==component_graph
+    sgc=component_graph_v2.copy(reverse_nodes=False)
+    assert sgc==component_graph_v2
+
+def test_graph_copy_reversed(simple_graph, cyclic_graph, component_graph, component_graph_v2):
+    sgc=simple_graph.reversed()
+    assert sgc.root_nodes()==simple_graph.leaf_nodes()
+    sgc=cyclic_graph.reversed()
+    assert sgc.root_nodes()==cyclic_graph.leaf_nodes()
+    sgc=component_graph.reversed()
+    assert sgc.root_nodes()==component_graph.leaf_nodes()
+    sgc=component_graph_v2.reversed()
+    assert sgc.root_nodes()==component_graph_v2.leaf_nodes()
