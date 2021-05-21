@@ -36,6 +36,8 @@ class Node():
         self._update_neighbors()
 
     def __eq__(self, node):
+        if not isinstance(node, Node):
+            return False
         name_check = self.name == node.name
         successors_check = all([k in set(k for k,v in node.successors.items()) for k,v in self.successors.items() ])
         predecessors_check = all([k  in set(k for k,v in node.predecessors.items()) for k,v in self.predecessors.items()])
@@ -85,7 +87,8 @@ class Edge():
             data = {}
         self.data = data
     def __eq__(self, edge):
-        #name_check = self.name == node.name
+        if not isinstance(edge, Edge):
+            return False
         edge_check = self.edge == edge.edge
         data_check = all([(k,v) in set((x,y) for x,y in edge.data.items()) for k,v in self.data.items() ])
         return all([edge_check,data_check])
@@ -115,16 +118,13 @@ class DiGraph(Graph):
 
     def __eq__(self, digraph):
         name_check = self.name == digraph.name
-        nodes_check = all([n==digraph.nodes[k] for k,n in self.nodes.items()]) and (len(self.nodes) == len(digraph.nodes))
-        edges_check = all([e==digraph.edges[k] for k,e in self.edges.items()]) and (len(self.edges) == len(digraph.edges))
+        nodes_check = all([n==digraph.nodes.get(k,None) for k,n in self.nodes.items()]) and (len(self.nodes) == len(digraph.nodes))
+        edges_check = all([e==digraph.edges.get(k,None) for k,e in self.edges.items()]) and (len(self.edges) == len(digraph.edges))
         acyclic_check = self.acyclic==digraph.acyclic
         if not all([name_check, nodes_check, edges_check, acyclic_check]):
             print([name_check, nodes_check, edges_check, acyclic_check])
         return all([name_check, nodes_check, edges_check, acyclic_check])
 
-    def __next__(self):
-        for k,v in self.nodes.items():
-            yield v
 
     @staticmethod
     def from_dict(node_edges_dict,acyclic=True,name=None):
@@ -255,9 +255,8 @@ class DiGraph(Graph):
                 leaves.append(n.name)
         return set(leaves)
 
-    def nodes_degree(self, degree=None, names=True, in_out=None):
+    def nodes_degree(self, degree=None, in_out=None):
         """:parm degree: None, or int - a selector applied as a filter
-        :parm names: bool, return Names if True, or Node objects if False
         :parm in_out: None, bool - specify whether in, out or both degree measures are to be measured
         """
         d_func_map = { None : "degree",
@@ -269,10 +268,8 @@ class DiGraph(Graph):
             for k,n in self.nodes.items():
                 #if n.degree()==degree:
                 if getattr(n,d_func_map[in_out])()==degree:
-                    if names:
-                        node_list.append(n.name)
-                    else:
-                        node_list.append(n)
+                    node_list.append(n.name)
+
             return node_list
         else:
             node_d = {}
@@ -280,31 +277,29 @@ class DiGraph(Graph):
                 #dk=n.degree()
                 dk=getattr(n,d_func_map[in_out])()
                 if dk in node_d.keys():
-                    if names:
-                        node_d[dk].append(n.name)
-                    else:
-                        node_d[dk].append(n)
+
+                    node_d[dk].append(n.name)
+
                 else:
-                    if names:
-                        node_d[dk]=[n.name]
-                    else:
-                        node_d[dk]=[n]
+                    node_d[dk]=[n.name]
+
             return node_d
 
-    def nodes_in_degree(self, degree=None, names=True):
-        return self.nodes_degree(degree=degree, names=names, in_out="in")
+    def nodes_in_degree(self, degree=None):
+        return self.nodes_degree(degree=degree, in_out="in")
 
-    def nodes_out_degree(self, degree=None, names=True):
-        return self.nodes_degree(degree=degree, names=names, in_out="out")
+    def nodes_out_degree(self, degree=None ):
+        return self.nodes_degree(degree=degree,in_out="out")
 
-    def ancestors(self, node, names=True):
-        return set(self.connected_nodes(node, names=names, direction="up"))
+    def ancestors(self, node):
+        return set(self.connected_nodes(node, direction="up"))
 
-    def descendents(self, node, names=True):
-        return set(self.connected_nodes(node, names=names, direction="down"))
+    def descendents(self, node):
+        return set(self.connected_nodes(node, direction="down"))
 
     # The siblings of a node are those that share a common parent (or parents)
-    def siblings(self, node, names=True):
+    # If a node is the sole child of its parent node, then it is a sibling of itself.
+    def siblings(self, node):
         siblings = set()
         if isinstance(node, Node):
             parents = node.predecessors
@@ -315,8 +310,9 @@ class DiGraph(Graph):
                 siblings.add(s)
         return siblings
 
-    # coparents are the reverse analog of siblings - a pair (or more) of parents of the same child node
-    def coparents(self, node, names=True):
+    # coparents are the reverse analog of siblings - find groups of nodes who share parenthood of the same child nodes
+    # As with siblings, coparents always include themselves, should no other matching nodes be present.
+    def coparents(self, node ):
         coparents = set()
         if isinstance(node, Node):
             children = node.successors
@@ -329,7 +325,7 @@ class DiGraph(Graph):
 
 
 
-    def connected_nodes(self, node, names=False, direction=None):
+    def connected_nodes(self, node, direction=None):
         """For a given node, find all nodes connected to it according to the direction parameter.
         If direction is `up`, then look for all predecessors (ancestors), if direction is `down` then
         find all successors (descendents) reachable from this node, and if direction is `None`,
@@ -348,34 +344,27 @@ class DiGraph(Graph):
         elif isinstance(node, Node):
             name = node.name
 
-        if names:
-            unprocessed = set([k for k in getattr(self.nodes[name],d_func_map[direction]).keys()])
-        else:
-            unprocessed = set([v for v in getattr(self.nodes[name],d_func_map[direction]).values()])
+        unprocessed = set([v.name for v in getattr(self.nodes[name],d_func_map[direction]).values()])
 
         stack = set([i for i in unprocessed])
+
         while len(stack) > 0:
             for k in stack:
                 accumulator.append(k)
                 processed.add(k)
-                if names:
-                    for pk in getattr(self.nodes[k],d_func_map[direction]).keys():
-                        unprocessed.add(pk)
-                else:
-                    for pk in getattr(self.nodes[k.name],d_func_map[direction]).values():
-                        unprocessed.add(pk)
+                for pk in getattr(self.nodes[k],d_func_map[direction]).values():
+                    unprocessed.add(pk.name)
                 unprocessed.remove(k)
             stack = set([i for i in unprocessed])-set(processed)
-        return set(accumulator)
+
+        return set(accumulator)-set([name])
 
     def regions(self, containing=None):
         unprocessed = set(self.nodes.keys())
         regions = []
         while len(unprocessed)>0:
             node = unprocessed.pop()
-            current_region = set(self.connected_nodes(node,names=True))
-            if current_region == set():
-                current_region.add(node)
+            current_region = set(self.connected_nodes(node)).union(set([node]))
             unprocessed=unprocessed-set(current_region)
             regions.append(current_region)
 
@@ -412,8 +401,8 @@ class DiGraph(Graph):
             if k not in processed:
                 cycle = (self.ancestors(k).intersection(self.descendents(k)))
                 if len(cycle)>0:
-                    loop_members.add(frozenset(cycle))
-                    processed=processed.union(cycle)
+                    loop_members.add(frozenset(cycle.union(set([k]))))
+                    processed=processed.union(cycle.union(set([k])))
         if len (loop_members)==0:
             return set()
         else:
@@ -448,6 +437,8 @@ class DiGraph(Graph):
             for n in cycle:
                 node_translation_map[n]=c_name
 
+        print(node_translation_map)
+
         for e,cycle in enumerate(cm_list):
             data_payload = {}
             c_name = "__cycle_{e}".format(e=e)
@@ -459,10 +450,14 @@ class DiGraph(Graph):
                 for edge in self.nodes[member].edges():
                     if (len([n for n in edge if n in non_cycle_nodes])==1 and len([n for n in edge if n in cyclic_nodes])==1):
                         new_edge = (node_translation_map[edge[0]], node_translation_map[edge[1]])
-                        c_graph.add_edge(new_edge, data=self.edges[edge].data)
+                        if new_edge[0]!=new_edge[1]:
+                            print(new_edge)
+                            c_graph.add_edge(new_edge, data=self.edges[edge].data)
                     elif node_translation_map[edge[0]]!= node_translation_map[edge[1]] and len([n for n in edge if n in cyclic_nodes])==2:
                         new_edge = (node_translation_map[edge[0]], node_translation_map[edge[1]])
-                        c_graph.add_edge(new_edge, data=self.edges[edge].data)
+                        if new_edge[0]!=new_edge[1]:
+                            print(new_edge)
+                            c_graph.add_edge(new_edge, data=self.edges[edge].data)
 
 
             if not c_name in c_graph.nodes.keys():
@@ -501,7 +496,7 @@ class DiGraph(Graph):
                             c_map[w]=c
 
                             queue.append(w)
-        singletons = { k: 0 for k in self.nodes_degree(0,names=True) }
+        singletons = { k: 0 for k in self.nodes_degree(0) }
         c_map.update(singletons)
         return c_map
 
@@ -598,7 +593,7 @@ class DiGraph(Graph):
                 vp_iter=self.all_simple_paths_between(s_node, t_node)
                 for p in vp_iter:
                     yield p
-        for singleton in self.nodes_degree(0, names=True):
+        for singleton in self.nodes_degree(0):
             yield singleton
 
     def full_paths(self):
@@ -607,7 +602,7 @@ class DiGraph(Graph):
                 vp_iter=self.all_simple_paths_between(s_node, t_node)
                 for p in vp_iter:
                     yield p
-        for singleton in self.node_degree(0, names=True):
+        for singleton in self.node_degree(0):
             yield singleton
 
     def node_flows(self):
