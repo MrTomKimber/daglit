@@ -20,6 +20,10 @@ class DAGContainsCycleError(Exception):
     "Directed Acyclic Graph is cyclic"
     pass
 
+class DAGContainsNoRootNode(Exception):
+    "No Root Node Exists"
+    pass
+
 
 class Node():
     def __init__(self, name, successors=None, predecessors=None, data=None):
@@ -542,20 +546,27 @@ class DiGraph(Graph):
 
 
     def node_depth_map(self):
+        "Returns a dictionary of nodes, and their distances from a root node as determined by a breadth-first scan"
         depth=0
         ndm={}
         layer = self.root_nodes()
+        if len(layer)==0:
+            raise DAGContainsNoRootNode
         next_layer = set()
+        processed_set=set()
         while len(layer)>0:
             for n in layer:
-                ndm[n]=depth
+                if n not in processed_set:
+                    ndm[n]=depth
                 for s in self.nodes[n].successors:
-                    next_layer.add(s)
+                    if s not in processed_set:
+                        next_layer.add(s)
+                processed_set.add(n)
             depth=depth+1
-            layer=list(next_layer)
+
+            layer=list(set(next_layer)-processed_set)
             next_layer = set()
-        if len(ndm)!=len(self.nodes):
-            print (set(ndm.keys())-set(self.nodes.keys()))
+
         return ndm
 
     def all_simple_paths_between(self, source, target, cutoff=None):
@@ -583,29 +594,31 @@ class DiGraph(Graph):
                 stack.pop()
                 visited.pop()
 
-    def all_simple_paths(self):
+    def all_simple_paths(self,include_singletons=False):
         for s_node in self.nodes.keys():
             for t_node in self.nodes.keys():
                 vp_iter=self.all_simple_paths_between(s_node, t_node)
                 for p in vp_iter:
                     yield p
-        for singleton in self.nodes_degree(0):
-            yield singleton
+        if include_singletons:
+            for singleton in self.nodes_degree(0):
+                yield [singleton]
 
-    def full_paths(self):
+    def full_paths(self,include_singletons=False):
         for s_node in self.root_nodes():
             for t_node in self.leaf_nodes():
                 vp_iter=self.all_simple_paths_between(s_node, t_node)
                 for p in vp_iter:
                     yield p
-        for singleton in self.node_degree(0):
-            yield singleton
+        if include_singletons:
+            for singleton in self.nodes_degree(0):
+                yield [singleton]
 
     def node_flows(self):
         """How often does a node feature in an enumeration of all root to leaf node traversals?
            This gives an indication of the node's centrality.
            Alternately, how many such traversals exist that pass through each node?"""
-        return dict(Counter(chain(*self.full_paths())))
+        return dict(Counter(chain(*self.full_paths(include_singletons=True))))
 
 
     def edge_flows(self):
@@ -616,8 +629,8 @@ class DiGraph(Graph):
                 edge_flows_d[(fn,tn)]=edge_flows_d.get((fn,tn),0)+1
         return edge_flows_d
 
-    def longest_paths(self):
-        paths = list(self.full_paths())
+    def longest_paths(self, include_singletons=True):
+        paths = list(self.all_simple_paths(include_singletons=include_singletons))
         plen = [len(p) for p in paths]
         pind = [e for e,i in enumerate(plen) if i==max(plen)]
         return [paths[e] for e in pind]

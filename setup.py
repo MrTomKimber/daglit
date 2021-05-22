@@ -21,7 +21,7 @@ def get_version(rel_path):
             #delim = '"' if '"' in line else "'"
             delim = "="
             print(line)
-            return line.split(delim)[1]
+            return line.split(delim)[1].replace("\"","")
     else:
         raise RuntimeError("Unable to find version string.")
 
