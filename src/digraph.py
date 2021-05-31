@@ -120,12 +120,12 @@ class DiGraph(Graph):
         self.edges={}
         self.acyclic=acyclic
 
-    def __eq__(self, digraph):
+    def __eq__(self, digraph,debug=True):
         name_check = self.name == digraph.name
         nodes_check = all([n==digraph.nodes.get(k,None) for k,n in self.nodes.items()]) and (len(self.nodes) == len(digraph.nodes))
         edges_check = all([e==digraph.edges.get(k,None) for k,e in self.edges.items()]) and (len(self.edges) == len(digraph.edges))
         acyclic_check = self.acyclic==digraph.acyclic
-        if not all([name_check, nodes_check, edges_check, acyclic_check]):
+        if debug:
             print([name_check, nodes_check, edges_check, acyclic_check])
         return all([name_check, nodes_check, edges_check, acyclic_check])
 
@@ -394,6 +394,43 @@ class DiGraph(Graph):
 
         return sg
 
+    def compose(self, digraph):
+        comp_g = self.copy()
+        for e in digraph.edges:
+            comp_g.add_edge(e,digraph.edges[e].data)
+            for n in e:
+                comp_g.nodes[n].data = {**self.nodes.get(n,Node("__dummy")).data, **digraph.nodes[n].data}
+        for n in digraph.nodes:
+            if n not in comp_g.nodes:
+                comp_g.add_node(n, data=digraph.nodes[n].data)
+            else:
+                comp_g.nodes[n].data = {**self.nodes.get(n,Node("__dummy")).data, **digraph.nodes[n].data}
+        return comp_g
+
+
+
+    def relabel(self, label_dict):
+        relab_g = DiGraph(name,acyclic=self.acyclic)
+        for e in self.edges:
+            relab_g.add_edge((label_dict[e[0]],label_dict[e[1]]),self.edges[e].data)
+            for n in e:
+                relab_g.nodes[label_dict[n]].data = self.nodes[n].data
+        for n in self.nodes:
+            if label_dict[n] not in relab_g.nodes:
+                relab_g.add_node(label_dict[n], data=self.nodes[n].data)
+        return relab_g
+
+    def possibly_isomorphic(self, digraph,debug=False):
+        node_count_test = len(self.nodes)==len(digraph.nodes)
+        edge_count_test = len(self.edges)==len(digraph.edges)
+        node_degrees_test = {k:len(v) for k,v in self.nodes_degree().items()}=={k:len(v) for k,v in digraph.nodes_degree().items()}
+        node_in_degrees_test = {k:len(v) for k,v in self.nodes_in_degree().items()}=={k:len(v) for k,v in digraph.nodes_in_degree().items()}
+        node_out_degrees_test = {k:len(v) for k,v in self.nodes_out_degree().items()}=={k:len(v) for k,v in digraph.nodes_out_degree().items()}
+        if debug:
+            print ( [node_count_test, edge_count_test, node_degrees_test, node_in_degrees_test, node_out_degrees_test] )
+        return all([node_count_test, edge_count_test, node_degrees_test, node_in_degrees_test, node_out_degrees_test])
+
+
 
 
     def cycle_members(self):
@@ -544,6 +581,47 @@ class DiGraph(Graph):
         if len(remaining_set)>0 :
             raise DAGContainsCycleError(processed_set)
 
+    def core_layers(self):
+        """Returns a bottom-up dictionary of nodes and their layer numbers determined by repeated pruning of leaf nodes.
+        If a collection of nodes remains after all leaf nodes are pruned, they must be involved in a cycle, clique or other composite arrangement.
+        It should work for dis-connected graphs too.
+        """
+        layer_map = {}
+        layer_number = 0
+        layer_nodes = self.leaf_nodes()
+        working_g = self.copy()
+        remaining_nodes = set(self.nodes.keys())
+        while not len(layer_nodes)==0:
+            for n in layer_nodes:
+                layer_map[n]=layer_number
+            remaining_nodes=remaining_nodes-set(layer_nodes)
+            working_g = working_g.subgraph(remaining_nodes)
+            layer_nodes=working_g.leaf_nodes()
+            layer_number+=1
+        for n in remaining_nodes:
+            layer_map[n]=layer_number
+        return layer_map
+
+    def min_core_distances(self):
+        core_distances={}
+        core_layers=self.core_layers()
+        max_depth = max([v for v in core_layers.values()])
+        core_nodes = set([n for n,v in core_layers.items() if v == max_depth])
+
+        for n in self.nodes.keys():
+            if n in core_nodes:
+                core_distances[n]=0
+            else:
+                d = min([len(self.shortest_path_between(c,n))-1 for c in core_nodes])
+                core_distances[n]=d
+        return core_distances
+
+
+    def prune_leaves(self):
+        leaf_nodes = set(self.leaf_nodes())
+        all_nodes = set(self.nodes.keys())
+        remaining_nodes = all_nodes-leaf_nodes
+        return self.subgraph(remaining_nodes)
 
     def node_depth_map(self):
         "Returns a dictionary of nodes, and their distances from a root node as determined by a breadth-first scan"
@@ -655,6 +733,8 @@ class DiGraph(Graph):
         path = self.shortest_path_between(source, target)
         return len(path)
 
+    # Given two nodes in a tree-like arrangement, what is their closest common ancestor?
+    # i.e. Assuming a hierarchy, at what point can two distinct elements have a shared classification?
     def lowest_common_ancestors(self,x,y):
         x_ancestors = self.ancestors(x).union(x)
         y_ancestors = self.ancestors(y).union(y)

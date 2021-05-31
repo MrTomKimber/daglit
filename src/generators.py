@@ -33,7 +33,6 @@ def gen_random_name(length=8, alphabet=ALPHABET_UC):
     while not finished:
         yield "".join([random.choice(alphabet) for r in range(0,length)])
 
-
 def random_dag(nodesize=15, tree_factor=1, connected_factor=1, alphabet=ALPHABET_UC):
     rdag = daglit.digraph.DiGraph()
     node_collection = set()
