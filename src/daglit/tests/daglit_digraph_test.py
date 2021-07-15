@@ -67,6 +67,19 @@ def component_graph_v2():
                     "i" : ["g"]  }, acyclic=False)
     return dg
 
+@pytest.fixture
+def snake_graph():
+    dg = daglit.DiGraph.from_dict ({  "a" : ["b"],
+                    "b" : ["c"],
+                    "c" : ["d"],
+                    "d" : ["e"],
+                    "e" : ["f"],
+                    "f" : ["g"],
+                    "g" : ["h"],
+                    "h" : ["i"]  }, acyclic=False)
+    return dg
+
+
 def test_ancestry_digraph_methods(simple_graph):
     dg = simple_graph
     assert dg.ancestors('A')==set()
@@ -419,3 +432,11 @@ def test_longest_paths(simple_graph, cyclic_graph, component_graph, component_gr
                                                 ['e', 'f', 'g', 'a', 'b', 'c', 'd'],
                                                 ['f', 'g','a', 'b', 'c', 'd', 'e' ],
                                                 ['g', 'a', 'b', 'c', 'd', 'e', 'f']]
+
+def test_shrink_node(snake_graph):
+    start_length = len(snake_graph.nodes)
+    snake_graph.shrink_node("c")
+    assert len(snake_graph.nodes)==(start_length-1)
+    snake_graph.shrink_node("i")
+    assert len(snake_graph.nodes)==(start_length-2)
+    

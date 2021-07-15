@@ -155,7 +155,7 @@ class DiGraph(Graph):
             self.nodes[name]=node
 
     def delete_node(self, name):
-        """Removes a named node from the graph, along with any associated edges and information"""
+        """Removes or 'cuts' a named node from the graph, along with any associated edges and information"""
         del self.nodes[name]
         del_candidates=[]
         neighbors_to_update = set()
@@ -179,6 +179,64 @@ class DiGraph(Graph):
         for n in neighbors_to_update:
             if n in self.nodes:
                 self.nodes[n]._update_neighbors()
+
+    def shrink_node(self, name):
+        """Shrinks the node to nothing, all edges leading into the node are
+        connected directly with all nodes leading out from the node.
+        Performs the task in-place, returning nothing
+        """
+        edges_in = [e for e in self.edges.keys() if e[1] == name]
+        edges_out = [e for e in self.edges.keys() if e[0] == name]
+        candidate_new_edges=[]
+        for i in edges_in:
+            for o in edges_out:
+                candidate_new_edges.append((i[0],o[1]))
+        self.delete_node(name)
+        for e in candidate_new_edges:
+            self.add_edge(e)
+
+    # Shrink the graph of any nodes of degree < 3 - doing so should reveal any special
+    # configurations such as K3,3 or K5.
+
+    def core_layers(self, preserve=True):
+        # Recursively reduces a graph to connection-n layers.
+        # Nodes that are pruned are either done so crudely (preserve=False)
+        # Or their inward/outward connections are preserved (preserve=True)
+        # to maintain the conectitive structure of the graph
+        C = self.copy()
+        core_number = 0
+        remaining=C.nodes.keys()
+        layers={}
+        # Remove any trailing singletons and end-point-nodes.
+        while len(remaining)>0:
+            while True:
+                if preserve:
+                    candidates = C.nodes_degree(core_number)
+                else:
+                    candidates = [e for k,v in C.nodes_degree().items() if k <= core_number for e in v]
+                for c in candidates:
+                    layers[c]=core_number
+                    if preserve:
+                        C.shrink_node(c)
+                    else:
+                        C.delete_node(c)
+                if len(candidates)==0:
+                    break
+
+
+            if all([k>core_number for k in C.nodes_degree().keys()]):
+                core_number += 1
+            remaining=[(k,v.degree()) for k,v in C.nodes.items() if v.degree()!=0]
+
+
+        singletons = C.nodes_degree(0)
+        if len(singletons)>0:
+            for s in singletons:
+                C.delete_node(s)
+                layers[s]=core_number+1
+
+        return layers
+
 
     def add_edge(self, edge, data=None):
         """Adds an edge to a DiGraph - if any node in the edge definition isn't already extant, it will be created.
@@ -794,7 +852,7 @@ class DiGraph(Graph):
 
         if resolve_children:
             level = set(self.root_nodes())
-            while len(level) is not 0:
+            while len(level) != 0:
                 for n in level:
                     if n not in processed_set:
                         yield n
@@ -808,7 +866,7 @@ class DiGraph(Graph):
                 next_layer = set()
         else:
             level = set(self.leaf_nodes())
-            while len(level) is not 0:
+            while len(level) != 0:
                 for n in level:
                     if n not in processed_set:
                         yield n
