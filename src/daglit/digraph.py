@@ -154,6 +154,7 @@ class DiGraph(Graph):
             node = Node(name, data=data)
             self.nodes[name]=node
 
+
     def delete_node(self, name):
         """Removes or 'cuts' a named node from the graph, along with any associated edges and information"""
         del self.nodes[name]
@@ -401,10 +402,11 @@ class DiGraph(Graph):
                        "down" : "successors"
                        }
 
-        if isinstance(node, str):
-            name = node
-        elif isinstance(node, Node):
+
+        if isinstance(node, Node):
             name = node.name
+        else:
+            name = node
 
         unprocessed = set([v.name for v in getattr(self.nodes[name],d_func_map[direction]).values()])
 
@@ -625,7 +627,7 @@ class DiGraph(Graph):
         processed_set = []
         while len(root_layer)>0:
             if lexicographical:
-                root_layer=sorted(root_layer)[::-1]
+                root_layer=sorted(root_layer, key=lambda x: str(x))[::-1]
             n = root_layer.pop()
             remaining_set.remove(n)
             processed_set.append(n)
@@ -794,8 +796,8 @@ class DiGraph(Graph):
     # Given two nodes in a tree-like arrangement, what is their closest common ancestor?
     # i.e. Assuming a hierarchy, at what point can two distinct elements have a shared classification?
     def lowest_common_ancestors(self,x,y):
-        x_ancestors = self.ancestors(x).union(x)
-        y_ancestors = self.ancestors(y).union(y)
+        x_ancestors = self.ancestors(x).union(set([x]))
+        y_ancestors = self.ancestors(y).union(set([y]))
         ancestry_graph = self.subgraph(x_ancestors.intersection(y_ancestors))
         return ancestry_graph.leaf_nodes()
 

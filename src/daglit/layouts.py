@@ -1,4 +1,5 @@
 import daglit.digraph
+from random import random
 
 def rescale_positions(positions_d, xy_bounds):
     minx, maxx, miny, maxy = xy_bounds
@@ -12,6 +13,14 @@ def rescale_positions(positions_d, xy_bounds):
         yrangvals = 1
 
     return { k : ((((v[0]-minxvals)/xrangvals)*xrang)+minx, (((v[1]-minyvals)/yrangvals)*yrang)+miny) for k,v in positions_d.items() }
+
+def translate_positions(positions_d, xy_trans):
+    return { k : (v[0]+xy_trans[0], v[1]+xy_trans[1]) for k,v in positions_d.items()}
+
+def jiggle_positions(positions_d, jiggle_amount):
+    ja = jiggle_amount
+    return { k: (v[0]+((random()*ja)-(ja/2)), v[1]+((random()*ja)-(ja/2)) ) for k,v in positions_d.items() }
+
 
 def pad_short_leaf_nodes(dag):
     d = dag.copy()
@@ -73,6 +82,10 @@ def tree_layout(dag, hide_virtual=True,reverse=False):
             ordering[i]=c
             # Add the parents of this node to the current parents collection
             parents=parents.union(set(d.nodes[i].predecessors.keys()))
+            if leaf_count == 0 :
+                leaf_count = 1
+            if full_depth == 0 :
+                full_depth = 1
             if len(d.nodes[i].successors)==0:
                 if not reverse:
                     posns[i]= ((c/leaf_count), (depths[i]/full_depth))
@@ -157,112 +170,42 @@ def tree_layout_2(dag, hide_virtual=True,reverse=False):
     else:
         return posns
 
-def render_graph_svg(component_id, graph, posns, hide_virtual=True):
-    if component_id is None:
-        component_id = graph.name
+def tree_layout_with_single_final_assignment_layer(dag):
+    # Extract the top layers which should form a branching tree,
+    # and finally arrange the bottom layer to evenly distribute the remaining nodes
+    # in a reasonable manner
+    top_dag = dag.subgraph([k for k,n in dag.nodes.items() if not n.out_degree()==0])
+    top_dag = daglit.layouts.pad_short_leaf_nodes(top_dag)
 
-    node_circle = """<circle class="stroke_topaz fill_lightblue stroke_width_thin" cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" /> """
-    open_circle = """<circle class="stroke_black fill_white stroke_width_thin" cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" /> """
-    virtual_node_circle = """<circle class="stroke_green fill_avocado stroke_width_thin" cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" /> """
-    cext_t = """<text x="{cx}" y="{cy}" text-anchor="middle" alignment-baseline="middle">{text}</text>"""
-    nodes_svg = ""
-#    edge_line = """<line class="stroke_black stroke_width_thin" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" marker-end="url(#arrow)"/>"""
-    edge_line = """<path class="stroke_black stroke_width_thin" d="M{x1} {y1} L{x2} {y2}" marker-end="url(#arrow)"/>"""
-    for edge in graph.edges:
-        if ("__virtual" not in edge[1] or not hide_virtual):
-            edge_start_x, edge_start_y, edge_end_x, edge_end_y = posns[edge[0]][0], posns[edge[0]][1], posns[edge[1]][0], posns[edge[1]][1]
-            #nodes_svg = nodes_svg + edge_line.format(x1=edge_start_x, y1=edge_start_y, x2=edge_end_x, y2=edge_end_y )
-            x_diff, y_diff = (edge_end_x-edge_start_x), (edge_end_y-edge_start_y)
-            line_dist = (x_diff**2 + y_diff**2)**(1/2)
-            radius_offset = 1-(0.4/line_dist)
-            nodes_svg = nodes_svg + edge_line.format(x1=edge_start_x, y1=edge_start_y, x2=edge_start_x+(x_diff*radius_offset), y2=edge_start_y+(y_diff*radius_offset) )
+    bottom_dag = dag.subgraph([k for k,n in dag.nodes.items() if n.out_degree()==0])
 
+
+    top_posns=daglit.layouts.tree_layout(top_dag, hide_virtual=False)
+
+
+    edge_list = [ e for e in dag.edges if (e[0] in bottom_dag.nodes.keys() or e[1] in bottom_dag.nodes.keys())]
+
+
+    sum_count={}
+    for s,f in edge_list:
+        if f in sum_count:
+            sum_count[f]=(sum_count[f][0]+top_posns[s][0],sum_count[f][1]+1)
         else:
-            pass
+            sum_count[f]=(top_posns[s][0],1)
+    for s,f in sum_count.items():
+        sum_count[s]=f[0]/f[1]
+
+    d_step = 1 / (len(sum_count))
+    d_step_threshold = 1 / (len(sum_count)*2)
+    v_step = max(top_dag.node_depth_map().values())
+    v_loc = (1 / v_step) * (v_step + 4)
+    m_positions=sorted(sum_count.items(), key=lambda x: x[1])
+    mp_diffs=[m_positions[i][1]-m_positions[i-1][1] for i in range(1,len(m_positions))]
+    if any([p<d_step for p in mp_diffs]):
+        bottom_dag_posns = { k[0] : (d_step * (e+1),v_loc)  for e,k in enumerate(m_positions)}
+    else:
+        bottom_dag_posns = { k[0] : (k[1],v_loc)  for e,k in enumerate(m_positions)}
+    posns = {**top_posns, **bottom_dag_posns}
 
 
-    for node, pos in posns.items():
-        if "__virtual" not in node :
-            nodes_svg = nodes_svg + node_circle.format(r=0.3, cx=pos[0], cy=pos[1])
-            nodes_svg = nodes_svg + cext_t.format(cx=pos[0], cy=pos[1], text=str(node))
-        elif not hide_virtual:
-            nodes_svg = nodes_svg + virtual_node_circle.format(r=0.3, cx=pos[0], cy=pos[1])
-            nodes_svg = nodes_svg + cext_t.format(cx=pos[0], cy=pos[1], text=str(node[-3:]))
-
-    return  """<g id="{component_id}"><g>{contents}</g></g>""".format(component_id=component_id, contents=nodes_svg)
-
-
-def svg_base(width_height=(500,500), viewbox=(0,0,10,10), contents=None):
-    viewbox = ", ".join([str(v) for v in viewbox])
-    width, height = width_height
-    defs = """<defs>
-        <marker id="arrow" markerWidth="1" markerHeight="1" refX="0", refY="3" orient="auto" overflow="visible" markerUnits="strokeWidth">
-        <path d="M-7,0 L-7,6 L0,3 z" fill="#fff" stroke="black" fill-opacity="1.0"/>
-        </marker>
-        </defs>"""
-    svg_chunk = """<svg version="1.1" xmlns="http://www.w3.org/2000/svg"
-
-    xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0"
-    width="{width}" height="{height}" viewBox="{viewbox}">
-    {defs}
-      {contents}
-      </svg >
-        """.format(width=width, height=height, viewbox=viewbox, defs=defs, contents=contents)
-    return svg_chunk
-
-
-
-def css_style():
-    css_style = """
-        <style>
-            text {font-size:0.03em;}
-            .small_text {font-size:0.01em;}
-            .fill_white { fill: white; }
-            .fill_black { fill: black; }
-            .fill_red { fill: #FF3333; }
-            .fill_orange { fill: #FFAA00; }
-            .fill_yellow { fill: #FFFF00; }
-            .fill_green { fill: #00FF00; }
-            .fill_avocado { fill: #9bd975; }
-            .fill_cyan { fill: #00FFFF; }
-            .fill_lightblue { fill: #00AAFF; }
-            .fill_blue { fill: #0000FF; }
-            .fill_indigo { fill: #4400FF; }
-            .fill_violet { fill: #AA00FF; }
-            .fill_none { fill: none;}
-
-            .fill_garnet { fill: #ca2020;}
-            .fill_buttercup { fill: #dbac01;}
-            .fill_jade { fill: #05776a;}
-            .fill_topaz { fill: #246bcd;}
-
-            .fill_alpha_none { fill-opacity: 0.0;}
-            .fill_alpha_25pc { fill-opacity: 0.25;}
-            .fill_alpha_50pc { fill-opacity: 0.5;}
-            .fill_alpha_100pc { fill-opacity: 1.0;}
-
-            .stroke_white { stroke: white; }
-            .stroke_black { stroke: black; }
-            .stroke_red { stroke: #FF3333; }
-            .stroke_orange { stroke: #FFAA00; }
-            .stroke_yellow { stroke: #FFFF00; }
-            .stroke_green { stroke: #00FF00; }
-            .stroke_avocado { stroke: #9bd975; }
-            .stroke_cyan { stroke: #00FFFF; }
-            .stroke_lightblue { stroke: #00AAFF; }
-            .stroke_blue { stroke: #0000FF; }
-            .stroke_indigo { stroke: #4400FF;}
-            .stroke_violet { stroke: #AA00FF; }
-            .stroke_garnet { stroke: #ca2020;}
-            .stroke_buttercup { stroke: #dbac01; }
-            .stroke_jade { stroke: #05776a; }
-            .stroke_topaz { stroke: #246bcd; }
-            .stroke_none { stroke: none;}
-
-            .stroke_width_fine { stroke-width:0.03; }
-            .stroke_width_thin { stroke-width:0.05; }
-            .stroke_width_mid { stroke-width:0.1; }
-            .stroke_width_wide { stroke-width:0.5; }
-
-        </style>"""
-    return css_style
+    return posns
