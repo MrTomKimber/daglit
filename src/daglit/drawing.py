@@ -114,13 +114,6 @@ def render_edges_svg(graph, posns, edges_l=None, styles=None, hide_virtual=True)
     if hide_virtual:
         edges_l = [l for l in edges_l if ("__virtual" not in l[0] and "__virtual" not in l[1])]
 
-    if labels is None:
-        labels = { g:str(g[0]) + "-> " + str(g[1]) for g in edges_l }
-
-    for l in edges_l:
-        if l not in labels:
-            edges_l[l] = str(l[0]) + "-> " + str(l[1])
-
     if styles is None:
         styles = { k : SVGTemplate("ARROW") for k in edges_l}
     else:
