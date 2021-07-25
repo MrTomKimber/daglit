@@ -102,6 +102,7 @@ def render_labels_svg(graph, posns, labels=None, nodes_l=None, styles=None, hide
     for node in nodes_l:
         if all([p in styles[node].parameters.keys() for p in ("cx", "cy") ]) :
             nodes_svg = nodes_svg + styles[node].svg(cx=posns[node][0], cy=posns[node][1], text=labels[node])
+
     return nodes_svg
 
 
@@ -136,7 +137,8 @@ class SVGTemplate(object):
                               "RECT"   : self._rect_style,
                               "LINE"   : self._line_style,
                               "ARROW"  : self._arrow_style,
-                              "TEXT"  : self._text_style
+                              "TEXT"  : self._text_style,
+                              "USEDEF" : self._usedef_style
          }
 
         if str(style).upper() in self._style_mapping:
@@ -144,7 +146,7 @@ class SVGTemplate(object):
             self.style_func=self._style_mapping[str(style).upper()]
             self.style_func()
         else:
-            raise ValueError("{s} is not a recognised style.")
+            raise ValueError("{s} is not a recognised style.".format(s=style))
         # Update provided parameters, overriding any defaults
         for k,v in self.parameters.items():
             if k in parameters:
@@ -188,8 +190,12 @@ class SVGTemplate(object):
         self.parameters={"classes": ["stroke_black", "stroke_width_thin"], "x1":0, "y1":0, "x2":1, "y2":1 }
 
     def _text_style(self):
-        self.template="""<text x="{cx}" y="{cy}" text-anchor="middle" alignment-baseline="middle">{text}</text>"""
-        self.parameters={"classes": [], "cx":0, "cy":0, "text":"None" }
+        self.template="""<text class="{classes}" x="{cx}" y="{cy}" text-anchor="middle" alignment-baseline="middle" font-size="30px" >{text}</text>"""
+        self.parameters={"classes": [], "cx":0, "cy":0, "text":"None"}
+
+    def _usedef_style(self):
+        self.template="""<use xlink:href="{id}" x="{x}" y="{y}" width="{width}" height="{height}" /> """
+        self.parameters={"id":None, "classes": [], "x":0, "y":0, "width":5, "height":5}
 
 def svg_base(width_height=(500,500), viewbox=(0,0,10,10), contents=None):
     viewbox = ", ".join([str(v) for v in viewbox])
@@ -214,8 +220,6 @@ def svg_base(width_height=(500,500), viewbox=(0,0,10,10), contents=None):
 def css_style():
     css_style = """
         <style>
-            text {font-size:0.03em;}
-            .small_text {font-size:0.01em;}
             .fill_white { fill: white; }
             .fill_black { fill: black; }
             .fill_red { fill: #FF3333; }
@@ -262,6 +266,12 @@ def css_style():
             .stroke_width_thin { stroke-width:0.05; }
             .stroke_width_mid { stroke-width:0.1; }
             .stroke_width_wide { stroke-width:0.5; }
+
+            .font_size_tiny { font-size: 0.01em;}
+            .font_size_small { font-size: 0.03em;}
+            .font_size_medium { font-size: 0.07em;}
+            .font_size_large { font-size: 0.1em;}
+            .font_size_huge { font-size: 0.2em;}
 
         </style>"""
     return css_style
