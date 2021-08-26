@@ -170,6 +170,64 @@ def tree_layout_2(dag, hide_virtual=True,reverse=False):
     else:
         return posns
 
+def layer_assignment(dag, top_down=True):
+    working_dag = dag.copy()
+    layer_d = {}
+    layer = -1
+    if top_down:
+        while len(working_dag.nodes.items())>0:
+            layer = layer + 1
+            this_layer = [k for k,n in working_dag.nodes.items() if n.in_degree() == 0]
+            layer_d = { **layer_d, **{n:layer for n in this_layer}}
+            for n in this_layer:
+                working_dag.delete_node(n)
+    else:
+        while len(working_dag.nodes.items())>0:
+            layer = layer + 1
+            this_layer = [k for k,n in working_dag.nodes.items() if n.out_degree() == 0]
+            layer_d = { **layer_d, **{n:layer for n in this_layer}}
+            for n in this_layer:
+                working_dag.delete_node(n)
+        max_layer=max(layer_d.values())
+        layer_d ={k:max_layer-v for k,v in layer_d.items()}
+    return layer_d
+
+def cross_layer_edge_lengths(dag, layer_d):
+    clel_d = {}
+    for e,edge in dag.edges.items():
+        clel_d[e] = layer_d[edge.node_to] - layer_d[edge.node_from]
+    return clel_d
+
+
+def layered_dag_layout(dag):
+    working_dag = dag.copy()
+    # Layered Algorithm from ther literature:
+    # 1) Cycle Removal
+    # 2) Layer Assignment
+    # 3) Crossing Reduction
+    # 4) Coordinate Assignment
+
+    # 1) Cycle Removal/Test TBD - for now just exit if a cycle exists
+    if working_dag.has_cycle():
+        return None
+
+    # 2) Layer Assignment
+    layer_d=daglit.layouts.layer_assignment(working_dag, True) # N.B. True or False here can have a difference
+    # Add virtual nodes to bridge edges that cross multiple layers.
+    v_nodes=0
+    for edge, distance in daglit.layouts.cross_layer_edge_lengths(working_dag, layer_d).items():
+        if distance > 1:
+            working_dag.split_edge(edge, ["__v_{n}".format(n=e+v_nodes) for e,n in enumerate(range(0,distance))])
+            v_nodes = v_nodes + distance
+
+    # 3) Crossing Reduction - to determine a crossing reduction, first a prospective ordering needs to be
+    #                         established.
+    #                         Using top-down grouping is a reasonable 1st start where Nodes inherit their order
+    #                         from their parents.
+
+
+
+
 def tree_layout_with_single_final_assignment_layer(dag):
     # Extract the top layers which should form a branching tree,
     # and finally arrange the bottom layer to evenly distribute the remaining nodes

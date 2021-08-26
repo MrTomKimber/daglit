@@ -114,25 +114,25 @@ class DiGraph(Graph):
 
 
     """
-    def __init__(self, name=None, acyclic=True):
+    def __init__(self, name=None, cyclic=False):
         self.name = name
         self.nodes={}
         self.edges={}
-        self.acyclic=acyclic
+        self.cyclic=cyclic
 
     def __eq__(self, digraph,debug=True):
         name_check = self.name == digraph.name
         nodes_check = all([n==digraph.nodes.get(k,None) for k,n in self.nodes.items()]) and (len(self.nodes) == len(digraph.nodes))
         edges_check = all([e==digraph.edges.get(k,None) for k,e in self.edges.items()]) and (len(self.edges) == len(digraph.edges))
-        acyclic_check = self.acyclic==digraph.acyclic
+        acyclic_check = self.cyclic==digraph.cyclic
         if debug:
             print([name_check, nodes_check, edges_check, acyclic_check])
         return all([name_check, nodes_check, edges_check, acyclic_check])
 
 
     @staticmethod
-    def from_dict(node_edges_dict,acyclic=True,name=None):
-        d=DiGraph(name,acyclic)
+    def from_dict(node_edges_dict,cyclic=False,name=None):
+        d=DiGraph(name,cyclic)
         for n,successors in node_edges_dict.items():
             for s in successors:
                 d.add_edge((n,s))
@@ -199,6 +199,27 @@ class DiGraph(Graph):
     # Shrink the graph of any nodes of degree < 3 - doing so should reveal any special
     # configurations such as K3,3 or K5.
 
+    def split_edge(self, edge, names_list, data_list=None):
+        # Take an existing edge and sub-divide it into a path consisting of
+        # a series of nodes as described in the names_list, and annotated by
+        # the data present in the data_list
+        if isinstance(edge,Edge):
+            start_node = edge.from_node.name
+            end_node = edge.end_node.name
+        else:
+            start_node = edge[0]
+            end_node = edge[1]
+        if data_list is None:
+            data_list = [{ "virtual" : True} for n in range(len(names_list))]
+        last_node = start_node
+        for e,name in enumerate(names_list):
+            self.add_node(name, data=data_list[e])
+            self.add_edge((last_node, name))
+            last_node = name
+        self.add_edge((last_node, end_node))
+        self.delete_edge(edge)
+
+
     def core_layers(self, preserve=True):
         # Recursively reduces a graph to connection-n layers.
         # Nodes that are pruned are either done so crudely (preserve=False)
@@ -253,7 +274,7 @@ class DiGraph(Graph):
         for e in edge:
             if e not in self.nodes.keys():
                 self.add_node(e, data)
-        if (new_edge.node_to in self.ancestors(new_edge.node_from)) and self.acyclic==True:
+        if (new_edge.node_to in self.ancestors(new_edge.node_from)) and self.cyclic==False:
             raise EdgeCreatesCycleError(edge)
 
         self.edges[edge]=new_edge
@@ -262,6 +283,29 @@ class DiGraph(Graph):
 
         self.nodes[new_edge.node_from]._update_neighbors()
         self.nodes[new_edge.node_to]._update_neighbors()
+
+    def delete_edge(self, edge):
+        del self.edges[edge]
+        del_candidates=[]
+        neighbors_to_update = set()
+
+        s,f = edge
+
+        if f in self.nodes[s].successors.keys():
+            del self.nodes[s].successors[f]
+            neighbors_to_update.add(s)
+        if s in self.nodes[f].predecessors.keys():
+            del self.nodes[f].predecessors[s]
+            neighbors_to_update.add(f)
+
+        for n in neighbors_to_update:
+            if n in self.nodes:
+                self.nodes[n]._update_neighbors()
+
+    def reverse_edge(self, edge):
+        edge_reversed = (edge[1], edge[0])
+        self.delete_edge(edge)
+        self.add_edge(edge_reversed)
 
     def adjacency_matrix(self, nodelist=None):
         """Return the adjacency matrix for the graph in nested list format, along with a list of node-labels to align to xy positions."""
@@ -371,6 +415,8 @@ class DiGraph(Graph):
         for p in parents:
             for s in self.nodes[p].successors:
                 siblings.add(s)
+        if len(siblings)==0:
+            siblings.add(node)
         return siblings
 
     # coparents are the reverse analog of siblings - find groups of nodes who share parenthood of the same child nodes
@@ -442,7 +488,7 @@ class DiGraph(Graph):
 
     # Create a deep copy of the graph, using only the nodes referenced in the node_collection variable
     def subgraph(self, node_collection, name=None):
-        sg = DiGraph(name,acyclic=self.acyclic)
+        sg = DiGraph(name,cyclic=self.cyclic)
         for e in self.edges:
             if e[0] in node_collection and e[1] in node_collection:
                 sg.add_edge(e,self.edges[e].data)
@@ -470,7 +516,7 @@ class DiGraph(Graph):
 
 
     def relabel(self, label_dict):
-        relab_g = DiGraph(name,acyclic=self.acyclic)
+        relab_g = DiGraph(name,cyclic=self.cyclic)
         for e in self.edges:
             relab_g.add_edge((label_dict[e[0]],label_dict[e[1]]),self.edges[e].data)
             for n in e:
@@ -514,6 +560,20 @@ class DiGraph(Graph):
             return True
         else:
             return False
+
+    def thwart_cycles(self):
+        """De-cycle the dag by reversing nodes involved in cycles and killing the cycles"""
+        c_dag = self.copy()
+        # This is a loose definition of cycle, any node whose descendents include its ancestors is considered part of a cycle
+        cycles = c_dag.cycle_members() # Nodes involved in cycles.
+        for c_set in cycles:
+            c_set_edges = [e for e in c_dag.edges if e[0] in c_set and e[1] in c_set]
+            for c_edge in c_set_edges:
+                pass
+
+
+
+
 
     def consolidate_cycles(self):
         # Identify existing cycles and consolidate these into virtual "cyclic" nodes.
@@ -604,7 +664,7 @@ class DiGraph(Graph):
 
     def copy(self, reverse_nodes=False):
         """Return a new object with the same node and edge structure - all data components are preserved."""
-        cdag = DiGraph(self.name,self.acyclic)
+        cdag = DiGraph(self.name,self.cyclic)
         for k,n in self.nodes.items():
             cdag.add_node(k, data=n.data)
         if reverse_nodes:
@@ -886,7 +946,7 @@ class DiGraph(Graph):
 
 
     def depth_first_sort(self, node=None, accumulator=None):
-        if not self.acyclic:
+        if not self.cyclic:
             # Find and break any extant cycles before proceeding.
             pass
         if accumulator is None:
@@ -898,14 +958,14 @@ class DiGraph(Graph):
                 try:
                     node = (set(self.root_nodes())-set(accumulator)).pop()
                 except Exception as e:
-                    if not self.acyclic:
+                    if not self.cyclic:
                         print ( "Picking node from set", (set(self.nodes.keys())-set(accumulator)) )
                         node = (set(self.nodes.keys())-set(accumulator)).pop()
                     else:
                         raise e
                 for next_node in self.depth_first_sort(node,accumulator):
 
-                    if next_node not in set(accumulator) and not self.acyclic:
+                    if next_node not in set(accumulator) and not self.cyclic:
                         accumulator.append(next_node)
 
         else:

@@ -7,7 +7,7 @@ def render_graph_svg(component_id, graph, posns, labels=None, hide_virtual=True)
     node_circle = """<circle class="stroke_topaz fill_lightblue stroke_width_thin fill_alpha_25pc" cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" /> """
     open_circle = """<circle class="stroke_black fill_white stroke_width_thin" cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" /> """
     virtual_node_circle = """<circle class="stroke_green fill_avocado stroke_width_thin" cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" /> """
-    cext_t = """<text x="{cx}" y="{cy}" text-anchor="middle" alignment-baseline="middle">{text}</text>"""
+    cext_t = """<text class="font_size_huge" x="{cx}" y="{cy}" text-anchor="middle" alignment-baseline="middle">{text}</text>"""
     nodes_svg = ""
 #    edge_line = """<line class="stroke_black stroke_width_thin" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" marker-end="url(#arrow)"/>"""
     edge_line = """<path class="stroke_black stroke_width_thin" d="M{x1} {y1} L{x2} {y2}" marker-end="url(#arrow)"/>"""
@@ -17,7 +17,10 @@ def render_graph_svg(component_id, graph, posns, labels=None, hide_virtual=True)
             #nodes_svg = nodes_svg + edge_line.format(x1=edge_start_x, y1=edge_start_y, x2=edge_end_x, y2=edge_end_y )
             x_diff, y_diff = (edge_end_x-edge_start_x), (edge_end_y-edge_start_y)
             line_dist = (x_diff**2 + y_diff**2)**(1/2)
-            radius_offset = 1-(0.4/line_dist)
+            if line_dist>0:
+                radius_offset = 1-(0.4/line_dist)
+            else:
+                radius_offset = 0
             nodes_svg = nodes_svg + edge_line.format(x1=edge_start_x, y1=edge_start_y,
                                                      x2=edge_start_x+(x_diff*radius_offset), y2=edge_start_y+(y_diff*radius_offset) )
 

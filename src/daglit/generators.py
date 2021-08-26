@@ -33,7 +33,23 @@ def gen_random_name(length=8, alphabet=ALPHABET_UC):
     while not finished:
         yield "".join([random.choice(alphabet) for r in range(0,length)])
 
-def random_dag(nodesize=15, tree_factor=1, connected_factor=1, alphabet=ALPHABET_UC):
+def random_dag(nodesize=15, density=25, alphabet=ALPHABET_UC, allow_cycles=True):
+    rdag = daglit.digraph.DiGraph(cyclic=allow_cycles)
+    node_collection = set()
+    name_generator=gen_name_sequence(alphabet=alphabet)
+    for n in range (0,nodesize):
+        node_name=next(name_generator)
+        rdag.add_node(node_name)
+    nodes = list(rdag.nodes.keys())
+    edge_count = int((random.random()*density))+1
+    print(edge_count)
+    for e in range(0,edge_count):
+        n1=random.choice(nodes)
+        n2=random.choice(list(set(nodes)-set([n1])))
+        rdag.add_edge((n1,n2))
+    return rdag
+
+def random_dag_2(nodesize=15, tree_factor=1, connected_factor=1, alphabet=ALPHABET_UC):
     rdag = daglit.digraph.DiGraph()
     node_collection = set()
     name_generator=gen_name_sequence(alphabet=alphabet)
