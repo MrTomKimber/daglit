@@ -1,3 +1,36 @@
+import numpy as np
+# Credit Omar Aflak
+# https://towardsdatascience.com/b%C3%A9zier-interpolation-8033e9a262c2
+# find the a & b points
+def get_bezier_coef(points):
+    # since the formulas work given that we have n+1 points
+    # then n must be this:
+
+    n = len(points) - 1
+
+    # build coefficents matrix
+    C = 4 * np.identity(n)
+    np.fill_diagonal(C[1:], 1)
+    np.fill_diagonal(C[:, 1:], 1)
+    C[0, 0] = 2
+    C[n - 1, n - 1] = 7
+    C[n - 1, n - 2] = 2
+
+    # build points vector
+    P = [2 * (2 * points[i] + points[i + 1]) for i in range(n)]
+    P[0] = points[0] + 2 * points[1]
+    P[n - 1] = 8 * points[n - 1] + points[n]
+
+    # solve system, find a & b
+    A = np.linalg.solve(C, P)
+    B = [0] * n
+    for i in range(n - 1):
+        B[i] = 2 * points[i + 1] - A[i + 1]
+    B[n - 1] = (A[n - 1] + points[n]) / 2
+
+    return A, B
+
+
 
 def render_graph_svg(component_id, graph, posns, labels=None, hide_virtual=True):
     if component_id is None:
@@ -65,6 +98,9 @@ def render_nodes_svg(graph, posns, labels=None, nodes_l=None, styles=None, hide_
 
     nodes_svg=""
 
+    print(styles.keys())
+    print(posns.keys())
+
     for node in nodes_l:
         if all([p in styles[node].parameters.keys() for p in ("cx", "cy") ]) :
             nodes_svg = nodes_svg + styles[node].svg(cx=posns[node][0], cy=posns[node][1])
@@ -131,6 +167,10 @@ def render_edges_svg(graph, posns, edges_l=None, styles=None, hide_virtual=True)
         if all([p in styles[edge].parameters.keys() for p in ("x1", "x2", "y1", "y2") ]) :
             nodes_svg = nodes_svg + styles[edge].svg(x1=posns[edge[0]][0], y1=posns[edge[0]][1],x2=posns[edge[1]][0], y2=posns[edge[1]][1])
     return nodes_svg
+
+
+def render_curved_path_svg(graph, posns, paths, styles=None):
+    pass
 
 class SVGTemplate(object):
 

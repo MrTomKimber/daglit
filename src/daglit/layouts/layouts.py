@@ -1,6 +1,7 @@
 import daglit.digraph
 from daglit.layouts  import transforms
 from random import random
+from math import sqrt
 
 class NodePositioningError(Exception):
     pass
@@ -19,7 +20,7 @@ class LayoutHelper(object):
         return loc_d
 
 
-    def smoothed_layout_to_locations(self, layout, max_iterations=2000):
+    def smoothed_layout_to_locations(self, layout, max_iterations=2000, spread=0.5):
         force_lattice = self.working_dag.copy()
 
 
@@ -28,6 +29,10 @@ class LayoutHelper(object):
             force_lattice.add_node(k, data=n.data)
         for k,e in self.working_dag.edges.items():
             force_lattice.add_edge(k,data=e.data)
+        for layer, content in layout.items():
+            for e in range(0,len(content)-1):
+                force_lattice.add_edge((content[e], content[e+1]), data={"edge_type" : "lattice_link"})
+
         #for e,ed in force_lattice.edges:
         #    print(e,ed)
         node_forces = { n : 0 for n in force_lattice.nodes}
@@ -35,27 +40,36 @@ class LayoutHelper(object):
 
         loc_d = self.raw_layout_to_locations(layout)
 
+
+
         while (sum([abs(c) for c in node_forces.values()])>1 or iteration==0) and iteration<max_iterations:
             iteration+=1
             node_forces = { n : 0 for n in force_lattice.nodes}
-            for layer, content in layout.items():
-                for e in range(0,len(content)-1):
-                    force_lattice.add_edge((content[e], content[e+1]), data={"edge_type" : "lattice_link"})
             for k,e in force_lattice.edges.items():
+                edge_dist = loc_d[e.node_to][0] - loc_d[e.node_from][0]
                 if e.data.get("edge_type", "graph_edge")=="graph_edge":
-                    edge_dist = loc_d[e.node_to][0] - loc_d[e.node_from][0]
-                    node_forces[e.node_from] = node_forces[e.node_from] + edge_dist
-                    node_forces[e.node_to] = node_forces[e.node_to] - edge_dist
+                    node_forces[e.node_from] = (node_forces[e.node_from] + (edge_dist*(1-spread)))
+                    node_forces[e.node_to] = (node_forces[e.node_to] - (edge_dist*spread))
+#                    for neighbour in [n for ed in force_lattice.nodes[e.node_from].edges() for n in ed]:
+#                        node_forces[neighbour] = node_forces[neighbour] + (1*edge_dist)/5
+#                    for neighbour in [n for ed in force_lattice.nodes[e.node_to].edges() for n in ed]:
+#                        node_forces[neighbour] = node_forces[neighbour] - (1*edge_dist)/5
+
+            #nf_copy = node_forces.copy()
+            for k,e in force_lattice.edges.items():
+                edge_dist = loc_d[e.node_to][0] - loc_d[e.node_from][0]
                 if e.data.get("edge_type", "graph_edge")=="lattice_link":
-                    edge_dist = loc_d[e.node_to][0] - loc_d[e.node_from][0]
-                    if abs(edge_dist) < 1:
-                        #print(k, edge_dist)
-                        node_forces[e.node_from] = node_forces[e.node_from] - (15*sign(edge_dist))
-                        node_forces[e.node_to] = node_forces[e.node_to] + (15*sign(edge_dist))
+                    n_degree = max([force_lattice.nodes[e.node_from].degree(), force_lattice.nodes[e.node_to].degree()])*1
 
+                    node_forces[e.node_from] = (node_forces[e.node_from] - (n_degree*(1/((edge_dist)**1))))
+                    node_forces[e.node_to] = (node_forces[e.node_to] + (n_degree*(1/((edge_dist)**1))))
 
+            #print(node_forces)
             for k,v in loc_d.items():
-                loc_d[k]=(loc_d[k][0] + node_forces[k]/50, loc_d[k][1])
+                f_sign = sign(node_forces[k])
+                #print(f_sign/10)
+                loc_d[k]=(loc_d[k][0] + f_sign/10, loc_d[k][1])
+        print(sum([abs(c) for c in node_forces.values()]),iteration)
         return loc_d
 
     @staticmethod
@@ -167,7 +181,7 @@ class PermutationCycler(object):
         return c
 
 def sign(number):
-    if number > 0:
+    if number >= 0:
         return 1
     else:
         return -1

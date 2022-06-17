@@ -75,12 +75,21 @@ class Node():
 
     def edges(self):
         edgelist = []
+        edgelist.extend(self.inward_edges())
+        edgelist.extend(self.outward_edges())
+        return edgelist
+
+    def inward_edges(self):
+        edgelist = []
         for p in self.predecessors.keys():
             edgelist.append((p,self.name))
+        return edgelist
+
+    def outward_edges(self):
+        edgelist = []
         for s in self.successors.keys():
             edgelist.append((self.name, s))
         return edgelist
-
 
 class Edge():
     def __init__(self, node_from, node_to, data=None):
@@ -412,6 +421,7 @@ class DiGraph(Graph):
             parents = node.predecessors
         else:
             parents = self.nodes[node].predecessors
+
         for p in parents:
             for s in self.nodes[p].successors:
                 siblings.add(s)
