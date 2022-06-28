@@ -130,12 +130,12 @@ def tree_layout_with_single_final_assignment_layer(dag):
     # and finally arrange the bottom layer to evenly distribute the remaining nodes
     # in a reasonable manner
     top_dag = dag.subgraph([k for k,n in dag.nodes.items() if not n.out_degree()==0])
-    top_dag = daglit.layouts.pad_short_leaf_nodes(top_dag)
+    top_dag = pad_short_leaf_nodes(top_dag)
 
     bottom_dag = dag.subgraph([k for k,n in dag.nodes.items() if n.out_degree()==0])
 
 
-    top_posns=daglit.layouts.tree_layout(top_dag, hide_virtual=False)
+    top_posns=tree_layout(top_dag, hide_virtual=False)
 
 
     edge_list = [ e for e in dag.edges if (e[0] in bottom_dag.nodes.keys() or e[1] in bottom_dag.nodes.keys())]
